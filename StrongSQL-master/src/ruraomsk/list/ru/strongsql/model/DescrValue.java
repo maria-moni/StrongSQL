@@ -3,7 +3,7 @@
  * To change this template file, choose Tools | Templates
  * and open the template in the editor.
  */
-package ruraomsk.list.ru.strongsql;
+package ruraomsk.list.ru.strongsql.model;
 
 import com.tibbo.aggregate.common.Log;
 
@@ -60,7 +60,7 @@ public class DescrValue {
     /**
      * @return the lenght
      */
-    public Integer getLenght() {
+    public Integer getLength() {
         switch (type) {
             case 0:
                 return 1;

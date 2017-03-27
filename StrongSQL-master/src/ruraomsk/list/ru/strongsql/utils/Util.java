@@ -3,9 +3,12 @@
  * To change this template file, choose Tools | Templates
  * and open the template in the editor.
  */
-package ruraomsk.list.ru.strongsql;
+package ruraomsk.list.ru.strongsql.utils;
 
 import com.tibbo.aggregate.common.Log;
+import ruraomsk.list.ru.strongsql.model.DescrValue;
+import ruraomsk.list.ru.strongsql.params.SetValue;
+
 import java.util.ArrayList;
 import java.util.HashMap;
 
@@ -143,7 +146,7 @@ public class Util {
      * @param ids - МАР описаний переменных
      * @return
      */
-    static byte[] ValuesToBuffer(int DBtype, ArrayList<SetValue> arvalue, HashMap<Integer, DescrValue> ids) {
+    public static byte[] ValuesToBuffer(int DBtype, ArrayList<SetValue> arvalue, HashMap<Integer, DescrValue> ids) {
         int LenBuffer = 0;
         for (SetValue value : arvalue) {
             DescrValue dv = ids.get(value.getId());
@@ -151,7 +154,7 @@ public class Util {
                 Log.CORE.info("StrongSQL нет такого id=" + value.getId());
                 continue;
             }
-            LenBuffer += 6 + dv.getLenght();
+            LenBuffer += 6 + dv.getLength();
             if (DBtype == 1) {
                 LenBuffer += 8;
             }
@@ -166,7 +169,7 @@ public class Util {
             }
             Util.IntegerToBuff(buffer, pos, sv.getId());
             pos += 4;
-            buffer[pos++] = (byte) (ds.getLenght() & 0xff);
+            buffer[pos++] = (byte) (ds.getLength() & 0xff);
             if (DBtype == 1) {
                 Util.LongToBuff(buffer, pos, sv.getTime());
                 pos += 8;

@@ -1,1 +1,1 @@
-# shiny-tribble
+# StrongSql

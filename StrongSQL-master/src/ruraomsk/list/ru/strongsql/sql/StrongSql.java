@@ -3,40 +3,39 @@
  * To change this template file, choose Tools | Templates
  * and open the template in the editor.
  */
-package ruraomsk.list.ru.strongsql;
+package ruraomsk.list.ru.strongsql.sql;
 
 import com.tibbo.aggregate.common.Log;
+import ruraomsk.list.ru.strongsql.model.DescrValue;
+import ruraomsk.list.ru.strongsql.params.ParamSQL;
+import ruraomsk.list.ru.strongsql.params.SetData;
+import ruraomsk.list.ru.strongsql.params.SetValue;
+import ruraomsk.list.ru.strongsql.utils.Util;
+
 import java.sql.*;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 
-/**
- * Библиотека для работы с сохраненными значениями переменных
- *
- * @author Yury Rusinov <ruraomsk@list.ru Automatics-A Omsk>
- */
 public class StrongSql {
 
     private Long SleepTime = 1000L;
-    private Integer DBtype;
+    private Integer DBType;
     private String myDBHead;
     private String myDBHeader;
     private String myDBData;
     private Connection con;
     private TreeMap<String, DescrValue> names;
     private HashMap<Integer, DescrValue> ids;
-    private ConcurrentLinkedQueue<SetData> outdata;
+    private ConcurrentLinkedQueue<SetData> outData;
     private Statement stmt;
-    private Long MaxLenght;
+    private Long MaxLength;
     private Long TekPos;
     private boolean errorSQL;
     private Long LastPos;
     private ParamSQL paramSQL;
-    private WriteterSql wrSQL = null;
+    private WriterSql wrSQL = null;
     private CtrlSql ctrlSQL = null;
     private HashMap<String, Integer> bases;
 
@@ -59,12 +58,11 @@ public class StrongSql {
         myDBHeader = paramSQL.myDB + "_header";
         myDBData = paramSQL.myDB + "_data";
         errorSQL = true;
-        outdata = new ConcurrentLinkedQueue<>();
+        outData = new ConcurrentLinkedQueue<>();
         if (connectDB()) {
             errorSQL = false;
-            wrSQL = new WriteterSql();
+            wrSQL = new WriterSql();
             ctrlSQL = new CtrlSql();
-
         }
 
     }
@@ -85,7 +83,7 @@ public class StrongSql {
             myDBHead = paramSQL.myDB + "_head";
             myDBHeader = paramSQL.myDB + "_header";
             myDBData = paramSQL.myDB + "_data";
-            outdata = new ConcurrentLinkedQueue<>();
+            outData = new ConcurrentLinkedQueue<>();
             if (connectUrl()) {
                 errorSQL = false;
 //                String req = "SELECT tablename FROM pg_tables;";
@@ -97,7 +95,6 @@ public class StrongSql {
                     if (str.indexOf("_") > 0) {
                         String name = str.substring(0, str.indexOf("_"));
                         bases.put(name, 0);
-
                     }
                 }
                 rs.close();
@@ -109,13 +106,13 @@ public class StrongSql {
     /**
      * Создаем базу данных на основе массива описаний полей
      *
-     * @param arraydesc - массив описаний переменных
+     * @param arrayDesc - массив описаний переменных
      * @param DBType - тип хранения данных 0-одна временная метка для всех.
      * 1-каждое значение имеет временную метку
      * @param maxSize - максимальное кол-во записей в циклическом буфере
      * @param description - название таблицы в читаемом виде
      */
-    public StrongSql(ParamSQL param, ArrayList<DescrValue> arraydesc, Integer DBType, Long maxSize, String description) {
+    public StrongSql(ParamSQL param, ArrayList<DescrValue> arrayDesc, Integer DBType, Long maxSize, String description) {
         try {
             paramSQL = param;
             myDBHead = paramSQL.myDB + "_head";
@@ -133,12 +130,12 @@ public class StrongSql {
             stmt.executeUpdate("create table " + myDBHeader + " (id int,name text,type int, primary key(id))");
             stmt.executeUpdate("insert into " + myDBHead + " (id,max,pos,last,type,description) values(1," + maxSize.toString() + ",0,0,"
                     + DBType.toString() + ",'" + description + "');");
-            for (DescrValue dsv : arraydesc) {
+            for (DescrValue dsv : arrayDesc) {
                 String str = "insert into " + myDBHeader + "(id,name,type) values (" + dsv.getId().toString()
                         + ",'" + dsv.getName() + "'," + dsv.getType().toString() + ");";
                 stmt.executeUpdate(str);
             }
-//            con.commit();
+            con.commit();
             con.close();
         } catch (ClassNotFoundException | SQLException ex) {
             Log.CORE.info("Error for create DataBase " + ex.getMessage());
@@ -152,7 +149,6 @@ public class StrongSql {
 
     /**
      * Поиск в базе данных по номерам переменных
-     *
      * @param from - время от
      * @param to - время до
      * @param idseek - переменная для поиска
@@ -179,7 +175,7 @@ public class StrongSql {
                         break;
                     }
                     if (id == idseek) {
-                        if (DBtype == 1) {
+                        if (DBType == 1) {
                             tm = Util.ToLong(buffer, pos);
                             pos += 8;
                         }
@@ -208,7 +204,7 @@ public class StrongSql {
                         value.setGood(buffer[pos++]);
                         map.put(tm,value);
                     } else {
-                        if (DBtype != 0) {
+                        if (DBType != 0) {
                             pos += 8;
                         }
                         pos += l;
@@ -272,10 +268,10 @@ public class StrongSql {
             String rez = "SELECT * FROM " + myDBHead + " WHERE id=1";
             ResultSet rr = stmt.executeQuery(rez);
             rr.next();
-            MaxLenght = rr.getLong("max");
+            MaxLength = rr.getLong("max");
             TekPos = rr.getLong("pos");
             LastPos = rr.getLong("last");
-            DBtype = rr.getInt("type");
+            DBType = rr.getInt("type");
             names = new TreeMap();
             ids = new HashMap();
             rez = "SELECT * FROM " + myDBHeader;
@@ -298,21 +294,21 @@ public class StrongSql {
      *
      * @return true - база данных дотупна
      */
-    public boolean isconnected() {
+    public boolean isConnected() {
         return !errorSQL;
     }
 
     /**
      * Добавить значения переменных в базу данных
      *
-     * @param tm - временная метка для всей записи
-     * @param arvalue - массив значений переменных
+     * @param timestamp - временная метка для всей записи
+     * @param values - массив значений переменных
      */
-    public void addValues(Timestamp tm, ArrayList<SetValue> arvalue) {
-        byte[] value = Util.ValuesToBuffer(DBtype, arvalue, ids);
-        SetData setdata = new SetData(tm, value);
+    public void addValues(Timestamp timestamp, ArrayList<SetValue> values) {
+        byte[] value = Util.ValuesToBuffer(DBType, values, ids);
+        SetData setdata = new SetData(timestamp, value);
 //        System.out.println(setdata.toString());
-        outdata.add(setdata);
+        outData.add(setdata);
 
     }
 
@@ -322,12 +318,12 @@ public class StrongSql {
      * @return - массив описаний переменных
      */
     public TreeMap<String, DescrValue> getNames() {
-        return isconnected() ? names : null;
+        return isConnected() ? names : null;
     }
 
-    class WriteterSql extends Thread {
+    class WriterSql extends Thread {
 
-        public WriteterSql() {
+        public WriterSql() {
             start();
         }
 
@@ -351,12 +347,12 @@ public class StrongSql {
                 }
                 SetData value = null;
                 PreparedStatement preparedStatement = null;
-                while ((value = outdata.poll()) != null) {
+                while ((value = outData.poll()) != null) {
 //                    System.out.println(value.toString());
                     try {
                         String rez;
                         preparedStatement = con.prepareStatement("begin;");
-                        if (LastPos > MaxLenght) {
+                        if (LastPos > MaxLength) {
                             // ? - место вставки нашего значеня
                             preparedStatement = con.prepareStatement("UPDATE " + myDBData + " SET tm=? ,var=? WHERE id='" + TekPos.toString() + "';");
                             preparedStatement.setTimestamp(1, value.getTs());
@@ -370,7 +366,7 @@ public class StrongSql {
                             TekPos++;
                         }
                         preparedStatement.executeUpdate();
-                        if (TekPos > MaxLenght) {
+                        if (TekPos > MaxLength) {
                             TekPos = 0L;
                         }
                         rez = "UPDATE " + myDBHead + " SET pos=" + TekPos.toString() + ", last=" + LastPos.toString() + " WHERE id=1";
@@ -388,7 +384,7 @@ public class StrongSql {
                         }
 
                         System.out.println("Error writer " + ex.getMessage());
-                        outdata.add(value);
+                        outData.add(value);
                         errorSQL = true;
                         continue;
                     }

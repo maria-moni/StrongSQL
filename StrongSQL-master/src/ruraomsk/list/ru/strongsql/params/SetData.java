@@ -3,7 +3,7 @@
  * To change this template file, choose Tools | Templates
  * and open the template in the editor.
  */
-package ruraomsk.list.ru.strongsql;
+package ruraomsk.list.ru.strongsql.params;
 
 import java.sql.Timestamp;
 import java.util.Arrays;

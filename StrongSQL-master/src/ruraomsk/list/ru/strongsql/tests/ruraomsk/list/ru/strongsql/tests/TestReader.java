@@ -1,17 +1,15 @@
-/*
+package ruraomsk.list.ru.strongsql.tests;/*
  * To change this license header, choose License Headers in Project Properties.
  * To change this template file, choose Tools | Templates
  * and open the template in the editor.
  */
-package ruraomsk.list.ru.strongsql.tests;
 
 import java.sql.Timestamp;
 import java.util.ArrayList;
-import ruraomsk.list.ru.strongsql.DescrValue;
-import ruraomsk.list.ru.strongsql.ParamSQL;
-import ruraomsk.list.ru.strongsql.SetValue;
-import ruraomsk.list.ru.strongsql.StrongSql;
-import ruraomsk.list.ru.strongsql.Util;
+import ruraomsk.list.ru.strongsql.model.DescrValue;
+import ruraomsk.list.ru.strongsql.params.ParamSQL;
+import ruraomsk.list.ru.strongsql.params.SetValue;
+import ruraomsk.list.ru.strongsql.sql.StrongSql;
 
 /**
  *

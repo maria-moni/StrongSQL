@@ -64,7 +64,6 @@ public class StrongSql {
             wrSQL = new WriterSql();
             ctrlSQL = new CtrlSql();
         }
-
     }
 
     /**
@@ -140,7 +139,6 @@ public class StrongSql {
         } catch (ClassNotFoundException | SQLException ex) {
             Log.CORE.info("Error for create DataBase " + ex.getMessage());
         }
-
     }
 
     public HashMap<String, Integer> getBases() {

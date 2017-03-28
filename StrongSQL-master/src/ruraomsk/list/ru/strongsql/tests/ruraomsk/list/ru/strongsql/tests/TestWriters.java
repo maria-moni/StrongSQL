@@ -23,10 +23,10 @@ public class TestWriters {
 
         ArrayList<SetValue> arrayValues = new ArrayList<>();
         ArrayList<DescrValue> arrayDesc = new ArrayList<>();
-        arrayDesc.add(new DescrValue("testbool", 1, 0));
-        arrayDesc.add(new DescrValue("testint", 2, 1));
-        arrayDesc.add(new DescrValue("testfloat", 3, 2));
-        arrayDesc.add(new DescrValue("testlong", 4, 3));
+//        arrayDesc.add(new DescrValue("testbool", 1, 0));
+//        arrayDesc.add(new DescrValue("testint", 2, 1));
+//        arrayDesc.add(new DescrValue("testfloat", 3, 2));
+//        arrayDesc.add(new DescrValue("testlong", 4, 3));
         for (Integer i = 1; i < 15; i++) {
             arrayDesc.add(new DescrValue("test" + i.toString(), i, 1));
         }

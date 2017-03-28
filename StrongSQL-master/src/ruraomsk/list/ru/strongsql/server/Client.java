@@ -18,16 +18,20 @@ public class Client {
             Timestamp to = new Timestamp(System.currentTimeMillis() - 5000L);
             Timestamp from = new Timestamp(System.currentTimeMillis() - 360000L);
 
-            ByteBuffer byteBuffer = ByteBuffer.allocate(20);
-            byteBuffer.putLong(to.getTime());
-            byteBuffer.putLong(from.getTime());
-            byteBuffer.putInt(1);
-
+            ByteBuffer byteBuffer = getBuffer(from, to, 1);
             writer.write(byteBuffer.array());
 
         } catch (IOException e) {
             e.printStackTrace();
         }
 
+    }
+
+    private static ByteBuffer getBuffer(Timestamp from, Timestamp to, int id){
+        ByteBuffer byteBuffer = ByteBuffer.allocate(20);
+        byteBuffer.putLong(to.getTime());
+        byteBuffer.putLong(from.getTime());
+        byteBuffer.putInt(id);
+        return byteBuffer;
     }
 }

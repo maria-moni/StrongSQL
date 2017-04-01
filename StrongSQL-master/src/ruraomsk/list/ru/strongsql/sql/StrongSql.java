@@ -305,9 +305,11 @@ public class StrongSql {
     public void addValues(Timestamp timestamp, ArrayList<SetValue> values) {
         byte[] value = Util.ValuesToBuffer(DBType, values, ids);
         SetData setdata = new SetData(timestamp, value);
-//        System.out.println(setdata.toString());
         outData.add(setdata);
+    }
 
+    public byte[] getByteArray(ArrayList<SetValue> values) {
+        return Util.ValuesToBuffer(DBType, values, ids);
     }
 
     /**

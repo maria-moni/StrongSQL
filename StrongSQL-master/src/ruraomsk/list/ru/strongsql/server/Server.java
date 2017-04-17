@@ -12,6 +12,8 @@ import java.nio.ByteBuffer;
 import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class Server {
     private static StrongSql sql;
@@ -26,15 +28,25 @@ public class Server {
         sql = new StrongSql(param);
         System.out.println("База " + param.toString() + " открыта...");
 
+        final ExecutorService workers = Executors.newFixedThreadPool(5);
+        ExecutorService base = Executors.newFixedThreadPool(5);
+
         try (ServerSocket serverSocket = new ServerSocket(7777)) {
             while (true) {
                 final Socket socket = serverSocket.accept();
-                new Thread(new Runnable() {
+
+                base.execute(new Runnable() {
                     @Override
                     public void run() {
-                        handle(socket);
+                        workers.execute(new Runnable() {
+                            @Override
+                            public void run() {
+                                handle(socket);
+                            }
+                        });
                     }
-                }).start();
+                });
+
             }
         } catch (IOException e) {
             e.printStackTrace();
@@ -53,7 +65,7 @@ public class Server {
             ArrayList<SetValue> sendPart = new ArrayList<>();
 
             List<SetValue> setValues = sql.seekData(new Timestamp(from), new Timestamp(to), id);
-            ByteBuffer byteBuffer = ByteBuffer.allocate(8192);
+            ByteBuffer byteBuffer = ByteBuffer.allocate(8096);
 
             if (setValues.size() != 0) {
                 sendPart.add(setValues.get(0));

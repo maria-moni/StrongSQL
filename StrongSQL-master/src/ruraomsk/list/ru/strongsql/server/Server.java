@@ -35,8 +35,8 @@ public class Server {
         System.out.println("База " + param.toString() + " открыта...");
 
         try (ServerSocket serverSocket = new ServerSocket(7777)) {
+            monitorTasks();
             while (true) {
-                monitorTasks();
                 final Socket socket = serverSocket.accept();
                 query.add(socket);
             }
@@ -46,21 +46,28 @@ public class Server {
     }
 
     private void monitorTasks(){
-        while (true){
-            if (!query.isEmpty())
-                workers.execute(new Runnable() {
-                    @Override
-                    public void run() {
-                        handle(query.iterator().next());
-                    }
-                });
-            else
-                try {
-                    Thread.sleep(10000);
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                while (true){
+                    if (!query.isEmpty()) {
+                        final Socket currentSocket = query.iterator().next();
+                        workers.execute(new Runnable() {
+                            @Override
+                            public void run() {
+                                handle(currentSocket);
+                            }
+                        });
+                        query.remove(currentSocket);
+                    } else
+                        try {
+                            Thread.sleep(5000);
+                        } catch (InterruptedException e) {
+                            e.printStackTrace();
+                        }
                 }
-        }
+            }
+        }).start();
     }
 
     private void handle(Socket socket) {
@@ -74,7 +81,6 @@ public class Server {
 
             setValues = sql.seekData(new Timestamp(from), new Timestamp(to), id);
             sendData(setValues, writer);
-
         } catch (IOException e) {
             e.printStackTrace();
         }

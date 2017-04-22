@@ -10,8 +10,7 @@ import java.util.Arrays;
 
 public class Client {
 
-    public static void main(String[] args) {
-
+    public void connectToServer() {
         Socket socket;
         try {
             socket = new Socket("localhost", 7777);
@@ -33,7 +32,7 @@ public class Client {
 
     }
 
-    private static ByteBuffer getBuffer(Timestamp from, Timestamp to, int id){
+    private ByteBuffer getBuffer(Timestamp from, Timestamp to, int id){
         ByteBuffer byteBuffer = ByteBuffer.allocate(20);
         byteBuffer.putLong(to.getTime());
         byteBuffer.putLong(from.getTime());

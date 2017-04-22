@@ -3,6 +3,7 @@ package ruraomsk.list.ru.strongsql.server;
 import ruraomsk.list.ru.strongsql.params.ParamSQL;
 import ruraomsk.list.ru.strongsql.params.SetValue;
 import ruraomsk.list.ru.strongsql.sql.StrongSql;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -10,15 +11,20 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.ByteBuffer;
 import java.sql.Timestamp;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class Server {
-    private static StrongSql sql;
+    private StrongSql sql;
+    private ExecutorService workers = Executors.newFixedThreadPool(5);
+    private Set<Socket> query = Collections.newSetFromMap(new ConcurrentHashMap<Socket, Boolean>());
 
-    public static void main(String[] args) {
+    private ByteBuffer byteBuffer = ByteBuffer.allocate(8 * 17); // 4 + 8 + 4 + 1 + (isLast 1 + size 1)
+    private List<SetValue> setValues = new ArrayList<>();
+
+    public void getConnection() {
         ParamSQL param = new ParamSQL();
         param.myDB = "temp";
         param.JDBCDriver = "org.postgresql.Driver";
@@ -28,32 +34,36 @@ public class Server {
         sql = new StrongSql(param);
         System.out.println("База " + param.toString() + " открыта...");
 
-        final ExecutorService workers = Executors.newFixedThreadPool(5);
-        ExecutorService base = Executors.newFixedThreadPool(5);
-
         try (ServerSocket serverSocket = new ServerSocket(7777)) {
             while (true) {
+                monitorTasks();
                 final Socket socket = serverSocket.accept();
-
-                base.execute(new Runnable() {
-                    @Override
-                    public void run() {
-                        workers.execute(new Runnable() {
-                            @Override
-                            public void run() {
-                                handle(socket);
-                            }
-                        });
-                    }
-                });
-
+                query.add(socket);
             }
         } catch (IOException e) {
             e.printStackTrace();
         }
     }
 
-    private static void handle(Socket socket) {
+    private void monitorTasks(){
+        while (true){
+            if (!query.isEmpty())
+                workers.execute(new Runnable() {
+                    @Override
+                    public void run() {
+                        handle(query.iterator().next());
+                    }
+                });
+            else
+                try {
+                    Thread.sleep(10000);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+        }
+    }
+
+    private void handle(Socket socket) {
         try (InputStream reader = socket.getInputStream();
              OutputStream writer = socket.getOutputStream()) {
             ByteBuffer buffer = ByteBuffer.allocate(20);
@@ -62,38 +72,53 @@ public class Server {
             long from = buffer.getLong();
             int id = buffer.getInt();
 
-            ArrayList<SetValue> sendPart = new ArrayList<>();
-
-            List<SetValue> setValues = sql.seekData(new Timestamp(from), new Timestamp(to), id);
-            ByteBuffer byteBuffer = ByteBuffer.allocate(8096);
-
-            if (setValues.size() != 0) {
-                sendPart.add(setValues.get(0));
-                byte[] sizeOfItem = sql.getByteArray(sendPart);
-                sendPart.clear();
-
-                for (SetValue setValue : setValues) {
-                    sendPart.add(setValue);
-
-                    if (buffer.position() + sizeOfItem.length < byteBuffer.limit()) {
-                        byteBuffer.put(sql.getByteArray(sendPart));
-                        sendPart.clear();
-                    } else {
-                        writer.write(byteBuffer.array());
-                        byteBuffer.flip();
-                        byteBuffer.put(sql.getByteArray(sendPart));
-                    }
-                }
-
-                writer.write(byteBuffer.array());
-            } else {
-                byteBuffer.clear();
-                byteBuffer.putInt(-1);
-                writer.write(byteBuffer.array());
-            }
+            setValues = sql.seekData(new Timestamp(from), new Timestamp(to), id);
+            sendData(setValues, writer);
 
         } catch (IOException e) {
             e.printStackTrace();
         }
     }
+
+    private void sendData(List<SetValue> setValues, OutputStream writer) {
+        ArrayList<SetValue> sendPart = new ArrayList<>();
+        int numberOfBlocks = setValues.size() / 8;
+
+        try {
+            if (setValues.size() != 0) {
+
+                for (int j = 0; j < numberOfBlocks - 1; j++) {
+                    for (int i = j * 8; i < j * 8 + 8; i++)
+                        sendPart.add(setValues.get(i));
+                    writeToClient((byte) 0, (byte) 0, sendPart, writer);
+                }
+
+                if (setValues.size() % 8 == 0) {
+                    for (int i = (numberOfBlocks - 1) * 8 + 1; i < setValues.size(); i++)
+                        sendPart.add(setValues.get(i));
+                    writeToClient((byte) 1, (byte) numberOfBlocks, sendPart, writer);
+                }
+
+                if (setValues.size() > numberOfBlocks * 8)
+                    for (int i = numberOfBlocks * 8 + 1; i < setValues.size(); i++)
+                        sendPart.add(setValues.get(i));
+
+                writeToClient((byte) 1, (byte) (numberOfBlocks + 1), sendPart, writer);
+            } else {
+                byteBuffer.clear();
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void writeToClient(byte isLast, byte number, ArrayList<SetValue> sendPart, OutputStream writer) throws IOException {
+        byteBuffer.put(isLast);
+        byteBuffer.put(number);
+        byteBuffer.put(sql.getByteArray(sendPart));
+        sendPart.clear();
+        writer.write(byteBuffer.array());
+        byteBuffer.flip();
+    }
 }
+

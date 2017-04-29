@@ -20,9 +20,9 @@ public class Server {
     private StrongSql sql;
     private ExecutorService workers = Executors.newFixedThreadPool(5);
     private Set<Socket> query = Collections.newSetFromMap(new ConcurrentHashMap<Socket, Boolean>());
+    private int numberInPackage = 2;
 
-    private ByteBuffer byteBuffer = ByteBuffer.allocate(8 * 17); // 4 + 8 + 4 + 1 + (isLast 1 + size 1)
-    private List<SetValue> setValues = new ArrayList<>();
+    private ByteBuffer byteBuffer = ByteBuffer.allocate(numberInPackage * 17); // 4 + 8 + 4 + 1 + (isLast 1 + size 1)
 
     public void getConnection() {
         ParamSQL param = new ParamSQL();
@@ -79,7 +79,7 @@ public class Server {
             long from = buffer.getLong();
             int id = buffer.getInt();
 
-            setValues = sql.seekData(new Timestamp(from), new Timestamp(to), id);
+            List<SetValue> setValues = sql.seekData(new Timestamp(from), new Timestamp(to), id);
             sendData(setValues, writer);
         } catch (IOException e) {
             e.printStackTrace();
@@ -88,28 +88,29 @@ public class Server {
 
     private void sendData(List<SetValue> setValues, OutputStream writer) {
         ArrayList<SetValue> sendPart = new ArrayList<>();
-        int numberOfBlocks = setValues.size() / 8;
+        int numberOfBlocks = setValues.size() / numberInPackage;
+        int numberOfBlocksToClient = setValues.size() % numberInPackage == 0? numberOfBlocks: numberOfBlocks + 1;
 
         try {
             if (setValues.size() != 0) {
 
                 for (int j = 0; j < numberOfBlocks - 1; j++) {
-                    for (int i = j * 8; i < j * 8 + 8; i++)
+                    for (int i = j * numberInPackage; i < j * numberInPackage + numberInPackage; i++)
                         sendPart.add(setValues.get(i));
-                    writeToClient((byte) 0, (byte) 0, sendPart, writer);
+                    writeToClient((byte) 0, (byte) numberOfBlocksToClient, sendPart, writer);
                 }
 
-                if (setValues.size() % 8 == 0) {
-                    for (int i = (numberOfBlocks - 1) * 8 + 1; i < setValues.size(); i++)
+                if (setValues.size() % numberInPackage == 0) {
+                    for (int i = (numberOfBlocks - 1) * numberInPackage + 1; i < setValues.size(); i++)
                         sendPart.add(setValues.get(i));
-                    writeToClient((byte) 1, (byte) numberOfBlocks, sendPart, writer);
+                    writeToClient((byte) 1, (byte) numberOfBlocksToClient, sendPart, writer);
                 }
 
-                if (setValues.size() > numberOfBlocks * 8)
-                    for (int i = numberOfBlocks * 8 + 1; i < setValues.size(); i++)
+                if (setValues.size() > numberOfBlocks * numberInPackage)
+                    for (int i = numberOfBlocks * numberInPackage + 1; i < setValues.size(); i++)
                         sendPart.add(setValues.get(i));
 
-                writeToClient((byte) 1, (byte) (numberOfBlocks + 1), sendPart, writer);
+                writeToClient((byte) 1, (byte) numberOfBlocksToClient, sendPart, writer);
             } else {
                 byteBuffer.clear();
             }

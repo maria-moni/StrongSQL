@@ -17,10 +17,12 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class Server {
+    private int numberInPackage = Configuration.numberInPackage;
+
     private StrongSql sql;
     private ExecutorService workers = Executors.newFixedThreadPool(5);
     private Set<Socket> query = Collections.newSetFromMap(new ConcurrentHashMap<Socket, Boolean>());
-    private int numberInPackage = 2;
+    private List<SetValue> setValues;
 
     private ByteBuffer byteBuffer = ByteBuffer.allocate(numberInPackage * 17); // 4 + 8 + 4 + 1 + (isLast 1 + size 1)
 
@@ -79,8 +81,10 @@ public class Server {
             long from = buffer.getLong();
             int id = buffer.getInt();
 
-            List<SetValue> setValues = sql.seekData(new Timestamp(from), new Timestamp(to), id);
+            setValues = sql.seekData(new Timestamp(from), new Timestamp(to), id);
             sendData(setValues, writer);
+            readReply(reader, writer);
+
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -89,7 +93,7 @@ public class Server {
     private void sendData(List<SetValue> setValues, OutputStream writer) {
         ArrayList<SetValue> sendPart = new ArrayList<>();
         int numberOfBlocks = setValues.size() / numberInPackage;
-        int numberOfBlocksToClient = setValues.size() % numberInPackage == 0? numberOfBlocks: numberOfBlocks + 1;
+        int numberOfBlocksToClient = (setValues.size() % numberInPackage) == 0? numberOfBlocks: numberOfBlocks + 1;
 
         try {
             if (setValues.size() != 0) {
@@ -104,13 +108,12 @@ public class Server {
                     for (int i = (numberOfBlocks - 1) * numberInPackage + 1; i < setValues.size(); i++)
                         sendPart.add(setValues.get(i));
                     writeToClient((byte) 1, (byte) numberOfBlocksToClient, sendPart, writer);
-                }
-
-                if (setValues.size() > numberOfBlocks * numberInPackage)
+                } else {
                     for (int i = numberOfBlocks * numberInPackage + 1; i < setValues.size(); i++)
                         sendPart.add(setValues.get(i));
+                    writeToClient((byte) 1, (byte) numberOfBlocksToClient, sendPart, writer);
+                }
 
-                writeToClient((byte) 1, (byte) numberOfBlocksToClient, sendPart, writer);
             } else {
                 byteBuffer.clear();
             }
@@ -119,13 +122,22 @@ public class Server {
         }
     }
 
+    private void readReply(InputStream reader, OutputStream writer) throws IOException {
+        ByteBuffer replyFromClient = ByteBuffer.allocate(1);
+        reader.read(replyFromClient.array());
+        byte reply = replyFromClient.get(0);
+        System.out.println("Need to repeat " + reply);
+        if (reply == 0)
+            sendData(setValues, writer);
+    }
+
     private void writeToClient(byte isLast, byte number, ArrayList<SetValue> sendPart, OutputStream writer) throws IOException {
         byteBuffer.put(isLast);
         byteBuffer.put(number);
         byteBuffer.put(sql.getByteArray(sendPart));
         sendPart.clear();
         writer.write(byteBuffer.array());
-        byteBuffer.flip();
+        byteBuffer.clear();
     }
 }
 

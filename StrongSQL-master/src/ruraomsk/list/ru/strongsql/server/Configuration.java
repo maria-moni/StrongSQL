@@ -1,5 +1,5 @@
 package ruraomsk.list.ru.strongsql.server;
 
 public class Configuration {
-    public static int numberInPackage = 4;
+    public static int numberInPackage = 5;
 }

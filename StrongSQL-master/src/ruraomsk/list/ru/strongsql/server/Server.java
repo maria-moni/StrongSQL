@@ -47,11 +47,11 @@ public class Server {
         }
     }
 
-    private void monitorTasks(){
+    private void monitorTasks() {
         new Thread(new Runnable() {
             @Override
             public void run() {
-                while (true){
+                while (true) {
                     if (!query.isEmpty()) {
                         final Socket currentSocket = query.iterator().next();
                         workers.execute(new Runnable() {
@@ -84,6 +84,7 @@ public class Server {
             setValues = sql.seekData(new Timestamp(from), new Timestamp(to), id);
             sendData(setValues, writer);
             readReply(reader, writer);
+            closeConnection(socket);
 
         } catch (IOException e) {
             e.printStackTrace();
@@ -93,7 +94,7 @@ public class Server {
     private void sendData(List<SetValue> setValues, OutputStream writer) {
         ArrayList<SetValue> sendPart = new ArrayList<>();
         int numberOfBlocks = setValues.size() / numberInPackage;
-        int numberOfBlocksToClient = (setValues.size() % numberInPackage) == 0? numberOfBlocks: numberOfBlocks + 1;
+        int numberOfBlocksToClient = (setValues.size() % numberInPackage) == 0 ? numberOfBlocks : numberOfBlocks + 1;
 
         try {
             if (setValues.size() != 0) {
@@ -129,6 +130,17 @@ public class Server {
         System.out.println("Need to repeat " + reply);
         if (reply == 0)
             sendData(setValues, writer);
+    }
+
+    private void closeConnection(Socket socket) throws IOException {
+        System.out.println("Closing connection " + socket.getLocalAddress());
+        ByteBuffer closeFromClient = ByteBuffer.allocate(1);
+        InputStream inputStream = socket.getInputStream();
+        inputStream.read(closeFromClient.array());
+        byte isClose = closeFromClient.get(0);
+        if (isClose == 1)
+            socket.close();
+        System.out.println("Closed " + socket.isClosed());
     }
 
     private void writeToClient(byte isLast, byte number, ArrayList<SetValue> sendPart, OutputStream writer) throws IOException {

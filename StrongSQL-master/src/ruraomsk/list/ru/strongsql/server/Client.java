@@ -29,6 +29,7 @@ public class Client {
             readFirstPackage(reader);
             readPackages(reader, writer);
 
+            sendCloseRequest(writer);
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -77,6 +78,16 @@ public class Client {
         try {
             ByteBuffer request = ByteBuffer.allocate(1);
             request.put((byte) isOk);
+            writer.write(request.array());
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void sendCloseRequest(OutputStream writer) {
+        try {
+            ByteBuffer request = ByteBuffer.allocate(1);
+            request.put((byte) 1);
             writer.write(request.array());
         } catch (IOException e) {
             e.printStackTrace();

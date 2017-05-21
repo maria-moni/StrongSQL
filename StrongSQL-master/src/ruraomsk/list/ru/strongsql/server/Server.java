@@ -21,7 +21,7 @@ public class Server {
 
     private StrongSql sql;
     private ExecutorService workers = Executors.newFixedThreadPool(5);
-    private Set<Socket> query = Collections.newSetFromMap(new ConcurrentHashMap<Socket, Boolean>());
+    private Map<Socket, Date> query = new ConcurrentHashMap<>();
     private List<SetValue> setValues;
 
     private ByteBuffer byteBuffer = ByteBuffer.allocate(numberInPackage * 17); // 4 + 8 + 4 + 1 + (isLast 1 + size 1)
@@ -40,11 +40,34 @@ public class Server {
             monitorTasks();
             while (true) {
                 final Socket socket = serverSocket.accept();
-                query.add(socket);
+                query.put(socket, new Date());
             }
         } catch (IOException e) {
             e.printStackTrace();
         }
+    }
+
+    private void closeByTimeout(final Socket socket, final Date date) {
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                Calendar calendar = Calendar.getInstance();
+                calendar.add(Calendar.SECOND, (-1 * Configuration.timeout));
+
+                while (true) {
+                    if (date.getTime() < calendar.getTimeInMillis()) {
+                        System.out.println("Closing connection by timeout " + socket.getLocalAddress());
+                        try {
+                            socket.close();
+                            System.out.println("Closed " + socket.isClosed());
+                            break;
+                        } catch (IOException e) {
+                            e.printStackTrace();
+                        }
+                    }
+                }
+            }
+        }).start();
     }
 
     private void monitorTasks() {
@@ -53,17 +76,19 @@ public class Server {
             public void run() {
                 while (true) {
                     if (!query.isEmpty()) {
-                        final Socket currentSocket = query.iterator().next();
+                        final Socket currentSocket = query.keySet().iterator().next();
+
                         workers.execute(new Runnable() {
                             @Override
                             public void run() {
                                 handle(currentSocket);
                             }
                         });
+                        closeByTimeout(currentSocket, query.get(currentSocket));
                         query.remove(currentSocket);
                     } else
                         try {
-                            Thread.sleep(5000);
+                            Thread.sleep(4000);
                         } catch (InterruptedException e) {
                             e.printStackTrace();
                         }
@@ -127,19 +152,21 @@ public class Server {
         ByteBuffer replyFromClient = ByteBuffer.allocate(1);
         reader.read(replyFromClient.array());
         byte reply = replyFromClient.get(0);
-        System.out.println("Need to repeat " + reply);
+        System.out.println("Is ok " + reply);
         if (reply == 0)
             sendData(setValues, writer);
     }
 
     private void closeConnection(Socket socket) throws IOException {
-        System.out.println("Closing connection " + socket.getLocalAddress());
         ByteBuffer closeFromClient = ByteBuffer.allocate(1);
         InputStream inputStream = socket.getInputStream();
         inputStream.read(closeFromClient.array());
         byte isClose = closeFromClient.get(0);
-        if (isClose == 1)
+        if (isClose == 1) {
+            System.out.println("Closing connection " + socket.getLocalAddress());
+            query.remove(socket);
             socket.close();
+        }
         System.out.println("Closed " + socket.isClosed());
     }
 

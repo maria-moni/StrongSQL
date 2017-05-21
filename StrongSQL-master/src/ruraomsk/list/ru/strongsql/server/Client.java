@@ -29,7 +29,7 @@ public class Client {
             readFirstPackage(reader);
             readPackages(reader, writer);
 
-            sendCloseRequest(writer);
+            //sendCloseRequest(writer);
         } catch (IOException e) {
             e.printStackTrace();
         }

@@ -12,11 +12,19 @@ public class Client {
     private int numberInPackage = Configuration.numberInPackage;
 
     private Timestamp to = new Timestamp(System.currentTimeMillis());
-    private Timestamp from = new Timestamp(System.currentTimeMillis() - 360000000000L);
+    private Timestamp from = new Timestamp(0L);
     private int id = 1;
+    private boolean isClose;
     private byte isLast = 1;
     private byte numberOfPackages;
     private ByteBuffer result;
+
+    public Client(Timestamp to, Timestamp from, int id, boolean isClose) {
+        this.to = to;
+        this.from = from;
+        this.id = id;
+        this.isClose = isClose;
+    }
 
     public void connectToServer() {
         Socket socket;
@@ -28,12 +36,11 @@ public class Client {
             sendRequest(writer);
             readFirstPackage(reader);
             readPackages(reader, writer);
-
-            //sendCloseRequest(writer);
+            if (isClose)
+                sendCloseRequest(writer);
         } catch (IOException e) {
             e.printStackTrace();
         }
-
     }
 
     private void sendRequest(OutputStream writer) throws IOException {
@@ -48,9 +55,10 @@ public class Client {
         if (isLast != 1)
             numberOfPackages = firstPackage.get();
         else numberOfPackages = 1;
-
+        System.out.println("numberOfPackages " + numberOfPackages);
         result = ByteBuffer.allocate(numberOfPackages * numberInPackage * 17);
         result.put(firstPackage);
+        firstPackage.clear();
     }
 
     private void readPackages(InputStream reader, OutputStream writer) throws IOException {
@@ -84,7 +92,7 @@ public class Client {
         }
     }
 
-    private void sendCloseRequest(OutputStream writer) {
+    public void sendCloseRequest(OutputStream writer) {
         try {
             ByteBuffer request = ByteBuffer.allocate(1);
             request.put((byte) 1);

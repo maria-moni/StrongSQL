@@ -13,7 +13,7 @@ import java.util.ArrayList;
 
 public class TestTask {
     public static void main(String[] args) {
-        addValues();
+        longTest();
     }
 
     private static void baseTest() {
@@ -61,7 +61,7 @@ public class TestTask {
         }).start();
         try {
             Thread.sleep(3000);
-            Client client = new Client(new Timestamp(System.currentTimeMillis()), new Timestamp(0L), 2, true);
+            Client client = new Client(new Timestamp(System.currentTimeMillis()), new Timestamp(0L), 2, false);
             client.connectToServer();
         } catch (InterruptedException e) {
             e.printStackTrace();
@@ -121,6 +121,11 @@ public class TestTask {
 
         for (int i = 0; i < 15000; i++) {
             stSQL.addValues(new Timestamp(System.currentTimeMillis()), arrayValues);
+            try {
+                Thread.sleep(400);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
         }
         System.out.println("Data added");
     }

@@ -9,14 +9,15 @@ import java.sql.Timestamp;
 import java.util.Arrays;
 
 public class Client {
-    private int numberInPackage = Configuration.numberInPackage;
+    private int packagesInBlock = Configuration.packagesInBlock;
+    private int bytesInPackage = Configuration.bytesInPackage;
 
     private Timestamp to = new Timestamp(System.currentTimeMillis());
     private Timestamp from = new Timestamp(0L);
     private int id = 1;
     private boolean isClose;
     private byte isLast = 1;
-    private byte numberOfPackages;
+    private Integer numberOfPackages;
     private ByteBuffer result;
 
     public Client(Timestamp to, Timestamp from, int id, boolean isClose) {
@@ -49,21 +50,18 @@ public class Client {
     }
 
     private void readFirstPackage(InputStream reader) throws IOException {
-        ByteBuffer firstPackage = ByteBuffer.allocate(numberInPackage * 17);
+        ByteBuffer firstPackage = ByteBuffer.allocate(packagesInBlock * bytesInPackage);
         reader.read(firstPackage.array());
-        isLast = firstPackage.get();
-        if (isLast != 1)
-            numberOfPackages = firstPackage.get();
-        else numberOfPackages = 1;
-        System.out.println("numberOfPackages " + numberOfPackages);
-        result = ByteBuffer.allocate(numberOfPackages * numberInPackage * 17);
+        isLast = firstPackage.get(0);
+        numberOfPackages = firstPackage.getInt(1);
+        result = ByteBuffer.allocate(numberOfPackages * packagesInBlock * bytesInPackage);
         result.put(firstPackage);
         firstPackage.clear();
     }
 
     private void readPackages(InputStream reader, OutputStream writer) throws IOException {
-        int readedPackages = 1;
-        ByteBuffer packages = ByteBuffer.allocate(numberInPackage * 17);
+        int readedPackages = 2;
+        ByteBuffer packages = ByteBuffer.allocate(packagesInBlock * bytesInPackage);
         if (isLast != 1) {
             while (true) {
                 reader.read(packages.array());
@@ -75,7 +73,6 @@ public class Client {
                     break;
             }
         }
-
         if (readedPackages == numberOfPackages) {
             sendReply(writer, 1);
         } else sendReply(writer, 0);

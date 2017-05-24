@@ -17,7 +17,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class Server {
-    private int numberInPackage = Configuration.numberInPackage;
+    private int packagesInBlock = Configuration.packagesInBlock;
 
     private StrongSql sql;
     private ExecutorService workers = Executors.newFixedThreadPool(5);
@@ -25,7 +25,7 @@ public class Server {
     private Set<Socket> query = Collections.newSetFromMap(new ConcurrentHashMap<Socket, Boolean>());
     private List<SetValue> setValues;
 
-    private ByteBuffer byteBuffer = ByteBuffer.allocate(numberInPackage * 17); // 4 + 8 + 4 + 1 + (isLast 1 + size 1)
+    private ByteBuffer byteBuffer = ByteBuffer.allocate(packagesInBlock * Configuration.bytesInPackage);
 
     public void getConnection() {
         ParamSQL param = new ParamSQL();
@@ -113,7 +113,8 @@ public class Server {
             setValues = sql.seekData(new Timestamp(from), new Timestamp(to), id);
             sendData(setValues, writer, socket);
             readReply(reader, writer, socket);
-            closeConnection(socket);
+            if (!socket.isClosed())
+                closeConnection(socket);
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -121,29 +122,30 @@ public class Server {
 
     private void sendData(List<SetValue> setValues, OutputStream writer, Socket socket) {
         ArrayList<SetValue> sendPart = new ArrayList<>();
-        int numberOfBlocks = setValues.size() / numberInPackage;
-        int numberOfBlocksToClient = (setValues.size() % numberInPackage) == 0 ? numberOfBlocks : numberOfBlocks + 1;
-
+        int numberOfBlocks = setValues.size() / packagesInBlock;
+        int numberOfBlocksToClient = (setValues.size() % packagesInBlock) == 0 ? numberOfBlocks : numberOfBlocks + 1;
         try {
             if (setValues.size() != 0) {
 
                 for (int j = 0; j < numberOfBlocks - 1; j++) {
-                    for (int i = j * numberInPackage; i < j * numberInPackage + numberInPackage; i++)
+                    for (int i = j * packagesInBlock; i < j * packagesInBlock + packagesInBlock; i++)
                         sendPart.add(setValues.get(i));
-                    writeToClient((byte) 0, (byte) numberOfBlocksToClient, sendPart, writer);
+                    writeToClient((byte) 0, numberOfBlocksToClient, sendPart, writer);
+                    sendPart.clear();
+                    closeSocketMap.put(socket, new Date());
                 }
-                closeSocketMap.put(socket, new Date());
 
-                if (setValues.size() % numberInPackage == 0) {
-                    for (int i = (numberOfBlocks - 1) * numberInPackage + 1; i < setValues.size(); i++)
+                if (setValues.size() % packagesInBlock == 0) {
+                    for (int i = (numberOfBlocks - 1) * packagesInBlock + 1; i < setValues.size(); i++)
                         sendPart.add(setValues.get(i));
-                    writeToClient((byte) 1, (byte) numberOfBlocksToClient, sendPart, writer);
+                    writeToClient((byte) 1, numberOfBlocksToClient, sendPart, writer);
+                    closeSocketMap.put(socket, new Date());
                 } else {
-                    for (int i = numberOfBlocks * numberInPackage + 1; i < setValues.size(); i++)
+                    for (int i = numberOfBlocks * packagesInBlock + 1; i < setValues.size(); i++)
                         sendPart.add(setValues.get(i));
-                    writeToClient((byte) 1, (byte) numberOfBlocksToClient, sendPart, writer);
+                    writeToClient((byte) 1, numberOfBlocksToClient, sendPart, writer);
+                    closeSocketMap.put(socket, new Date());
                 }
-                closeSocketMap.put(socket, new Date());
 
             } else {
                 byteBuffer.clear();
@@ -175,9 +177,9 @@ public class Server {
         System.out.println("Closed " + socket.isClosed());
     }
 
-    private void writeToClient(byte isLast, byte number, ArrayList<SetValue> sendPart, OutputStream writer) throws IOException {
+    private void writeToClient(byte isLast, Integer number, ArrayList<SetValue> sendPart, OutputStream writer) throws IOException {
         byteBuffer.put(isLast);
-        byteBuffer.put(number);
+        byteBuffer.putInt(number);
         byteBuffer.put(sql.getByteArray(sendPart));
         sendPart.clear();
         writer.write(byteBuffer.array());

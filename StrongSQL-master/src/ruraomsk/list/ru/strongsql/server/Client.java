@@ -7,10 +7,15 @@ import java.net.Socket;
 import java.nio.ByteBuffer;
 import java.sql.Timestamp;
 import java.util.Arrays;
+import java.util.concurrent.TimeUnit;
+import java.util.zip.CRC32;
+import java.util.zip.Checksum;
 
 public class Client {
-    private int packagesInBlock = Configuration.packagesInBlock;
+    private int packagesInBlock = Configuration.dataInBlock;
     private int bytesInPackage = Configuration.bytesInPackage;
+    private long startTime;
+    private long stopTime;
 
     private Timestamp to = new Timestamp(System.currentTimeMillis());
     private Timestamp from = new Timestamp(0L);
@@ -34,6 +39,7 @@ public class Client {
             OutputStream writer = socket.getOutputStream();
             InputStream reader = socket.getInputStream();
 
+            startTime = System.nanoTime();
             sendRequest(writer);
             readFirstPackage(reader);
             readPackages(reader, writer);
@@ -50,40 +56,58 @@ public class Client {
     }
 
     private void readFirstPackage(InputStream reader) throws IOException {
+        int protocolDataLen = 13;
         ByteBuffer firstPackage = ByteBuffer.allocate(packagesInBlock * bytesInPackage);
         reader.read(firstPackage.array());
         isLast = firstPackage.get(0);
         numberOfPackages = firstPackage.getInt(1);
         result = ByteBuffer.allocate(numberOfPackages * packagesInBlock * bytesInPackage);
-        result.put(firstPackage);
+        result.put(firstPackage.array(), protocolDataLen, firstPackage.array().length - protocolDataLen);
         firstPackage.clear();
     }
 
     private void readPackages(InputStream reader, OutputStream writer) throws IOException {
         int readedPackages = 2;
+        int protocolDataLen = 13;
         ByteBuffer packages = ByteBuffer.allocate(packagesInBlock * bytesInPackage);
+        long crc = 0;
         if (isLast != 1) {
             while (true) {
                 reader.read(packages.array());
-                result.put(packages);
+                result.put(packages.array(), protocolDataLen, packages.array().length - protocolDataLen);
                 byte isLast = packages.get(0);
+                crc = packages.getLong(2);
                 packages.clear();
                 readedPackages++;
                 if (isLast == 1)
                     break;
             }
         }
+        stopTime = System.nanoTime();
+        System.out.println("Time of full request including answer " + TimeUnit.MILLISECONDS.toMillis(stopTime - startTime) + " ms");
+
+        Checksum checksum = new CRC32();
+        checksum.update(result.array(), 0, result.array().length);
+
         if (readedPackages == numberOfPackages) {
-            sendReply(writer, 1);
-        } else sendReply(writer, 0);
+            // && crc == checksum.getValue()
+            System.out.println(crc + " " + checksum.getValue());
+            sendReply(reader, writer, 1);
+        } else sendReply(reader, writer, 0);
         System.out.println(Arrays.toString(result.array()));
     }
 
-    private void sendReply(OutputStream writer, int isOk) {
+    private void sendReply(InputStream reader, OutputStream writer, int isOk) {
         try {
             ByteBuffer request = ByteBuffer.allocate(1);
             request.put((byte) isOk);
             writer.write(request.array());
+            if(isOk == 0){
+                readFirstPackage(reader);
+                readPackages(reader, writer);
+                if (isClose)
+                    sendCloseRequest(writer);
+            }
         } catch (IOException e) {
             e.printStackTrace();
         }

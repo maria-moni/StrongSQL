@@ -15,9 +15,12 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.zip.CRC32;
+import java.util.zip.Checksum;
 
 public class Server {
-    private int packagesInBlock = Configuration.packagesInBlock;
+    private int dataInBlock = Configuration.dataInBlock;
 
     private StrongSql sql;
     private ExecutorService workers = Executors.newFixedThreadPool(5);
@@ -25,7 +28,7 @@ public class Server {
     private Set<Socket> query = Collections.newSetFromMap(new ConcurrentHashMap<Socket, Boolean>());
     private List<SetValue> setValues;
 
-    private ByteBuffer byteBuffer = ByteBuffer.allocate(packagesInBlock * Configuration.bytesInPackage);
+    private ByteBuffer byteBuffer = ByteBuffer.allocate(dataInBlock * Configuration.bytesInPackage);
 
     public void getConnection() {
         ParamSQL param = new ParamSQL();
@@ -110,7 +113,11 @@ public class Server {
             long from = buffer.getLong();
             int id = buffer.getInt();
 
+            long start = System.nanoTime();
             setValues = sql.seekData(new Timestamp(from), new Timestamp(to), id);
+            long stop = System.nanoTime();
+            System.out.println("Time of getting data from database " + TimeUnit.MILLISECONDS.toMillis(stop - start) + " ms");
+
             sendData(setValues, writer, socket);
             readReply(reader, writer, socket);
             if (!socket.isClosed())
@@ -122,28 +129,29 @@ public class Server {
 
     private void sendData(List<SetValue> setValues, OutputStream writer, Socket socket) {
         ArrayList<SetValue> sendPart = new ArrayList<>();
-        int numberOfBlocks = setValues.size() / packagesInBlock;
-        int numberOfBlocksToClient = (setValues.size() % packagesInBlock) == 0 ? numberOfBlocks : numberOfBlocks + 1;
+        int numberOfBlocks = setValues.size() / dataInBlock;
+        int numberOfBlocksToClient = (setValues.size() % dataInBlock) == 0 ? numberOfBlocks : numberOfBlocks + 1;
         try {
             if (setValues.size() != 0) {
 
                 for (int j = 0; j < numberOfBlocks - 1; j++) {
-                    for (int i = j * packagesInBlock; i < j * packagesInBlock + packagesInBlock; i++)
+                    for (int i = j * dataInBlock; i < j * dataInBlock + dataInBlock; i++)
                         sendPart.add(setValues.get(i));
-                    writeToClient((byte) 0, numberOfBlocksToClient, sendPart, writer);
+                    writeToClient((byte) 0, numberOfBlocksToClient, sendPart, 0L, writer);
                     sendPart.clear();
                     closeSocketMap.put(socket, new Date());
                 }
 
-                if (setValues.size() % packagesInBlock == 0) {
-                    for (int i = (numberOfBlocks - 1) * packagesInBlock + 1; i < setValues.size(); i++)
+                if (setValues.size() % dataInBlock == 0) {
+                    for (int i = (numberOfBlocks - 1) * dataInBlock + 1; i < setValues.size(); i++)
                         sendPart.add(setValues.get(i));
-                    writeToClient((byte) 1, numberOfBlocksToClient, sendPart, writer);
+
+                    writeToClient((byte) 1, numberOfBlocksToClient, sendPart, getCheckSum((ArrayList<SetValue>) setValues), writer);
                     closeSocketMap.put(socket, new Date());
                 } else {
-                    for (int i = numberOfBlocks * packagesInBlock + 1; i < setValues.size(); i++)
+                    for (int i = numberOfBlocks * dataInBlock + 1; i < setValues.size(); i++)
                         sendPart.add(setValues.get(i));
-                    writeToClient((byte) 1, numberOfBlocksToClient, sendPart, writer);
+                    writeToClient((byte) 1, numberOfBlocksToClient, sendPart, getCheckSum((ArrayList<SetValue>) setValues), writer);
                     closeSocketMap.put(socket, new Date());
                 }
 
@@ -153,6 +161,14 @@ public class Server {
         } catch (IOException e) {
             e.printStackTrace();
         }
+    }
+
+    private long getCheckSum(ArrayList<SetValue> sendPart) {
+        Checksum checksum = new CRC32();
+        byte[] byteBuffer = sql.getByteArray(sendPart);
+        System.out.println(Arrays.toString(byteBuffer));
+        checksum.update(byteBuffer, 0, byteBuffer.length);
+        return checksum.getValue();
     }
 
     private void readReply(InputStream reader, OutputStream writer, Socket socket) throws IOException {
@@ -177,9 +193,10 @@ public class Server {
         System.out.println("Closed " + socket.isClosed());
     }
 
-    private void writeToClient(byte isLast, Integer number, ArrayList<SetValue> sendPart, OutputStream writer) throws IOException {
+    private void writeToClient(byte isLast, Integer number, ArrayList<SetValue> sendPart, long crc, OutputStream writer) throws IOException {
         byteBuffer.put(isLast);
         byteBuffer.putInt(number);
+        byteBuffer.putLong(crc);
         byteBuffer.put(sql.getByteArray(sendPart));
         sendPart.clear();
         writer.write(byteBuffer.array());

@@ -13,7 +13,7 @@ import java.util.ArrayList;
 
 public class TestTask {
     public static void main(String[] args) {
-        longTest();
+        floatTest();
     }
 
     private static void baseTest() {

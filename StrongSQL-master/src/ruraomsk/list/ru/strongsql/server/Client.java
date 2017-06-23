@@ -56,8 +56,8 @@ public class Client {
     }
 
     private void readFirstPackage(InputStream reader) throws IOException {
-        int protocolDataLen = 13;
-        ByteBuffer firstPackage = ByteBuffer.allocate(packagesInBlock * bytesInPackage);
+        int protocolDataLen = Configuration.protocolExtraDataLen;
+        ByteBuffer firstPackage = ByteBuffer.allocate(packagesInBlock * bytesInPackage + protocolDataLen);
         reader.read(firstPackage.array());
         isLast = firstPackage.get(0);
         numberOfPackages = firstPackage.getInt(1);
@@ -67,16 +67,16 @@ public class Client {
     }
 
     private void readPackages(InputStream reader, OutputStream writer) throws IOException {
+        int protocolDataLen = Configuration.protocolExtraDataLen;
         int readedPackages = 2;
-        int protocolDataLen = 13;
-        ByteBuffer packages = ByteBuffer.allocate(packagesInBlock * bytesInPackage);
+        ByteBuffer packages = ByteBuffer.allocate(packagesInBlock * bytesInPackage + protocolDataLen);
         long crc = 0;
         if (isLast != 1) {
             while (true) {
                 reader.read(packages.array());
-                result.put(packages.array(), protocolDataLen, packages.array().length - protocolDataLen);
                 byte isLast = packages.get(0);
                 crc = packages.getLong(2);
+                result.put(packages.array(), protocolDataLen, packages.array().length - protocolDataLen);
                 packages.clear();
                 readedPackages++;
                 if (isLast == 1)
@@ -84,17 +84,17 @@ public class Client {
             }
         }
         stopTime = System.nanoTime();
-        System.out.println("Time of full request including answer " + TimeUnit.MILLISECONDS.toMillis(stopTime - startTime) + " ms");
+        System.out.println("Time of full request including answer " + TimeUnit.NANOSECONDS.toMillis(stopTime - startTime) + " ms");
 
         Checksum checksum = new CRC32();
         checksum.update(result.array(), 0, result.array().length);
 
-        if (readedPackages == numberOfPackages) {
-            // && crc == checksum.getValue()
+        System.out.println(Arrays.toString(result.array()));
+        System.out.println(result.array().length);
+        if (readedPackages == numberOfPackages || crc == checksum.getValue()) {//temp ||
             System.out.println(crc + " " + checksum.getValue());
             sendReply(reader, writer, 1);
         } else sendReply(reader, writer, 0);
-        System.out.println(Arrays.toString(result.array()));
     }
 
     private void sendReply(InputStream reader, OutputStream writer, int isOk) {
@@ -113,7 +113,7 @@ public class Client {
         }
     }
 
-    public void sendCloseRequest(OutputStream writer) {
+    private void sendCloseRequest(OutputStream writer) {
         try {
             ByteBuffer request = ByteBuffer.allocate(1);
             request.put((byte) 1);

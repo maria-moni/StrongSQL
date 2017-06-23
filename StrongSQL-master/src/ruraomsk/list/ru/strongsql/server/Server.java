@@ -28,7 +28,6 @@ public class Server {
     private Set<Socket> query = Collections.newSetFromMap(new ConcurrentHashMap<Socket, Boolean>());
     private List<SetValue> setValues;
 
-    private ByteBuffer byteBuffer = ByteBuffer.allocate(dataInBlock * Configuration.bytesInPackage);
 
     public void getConnection() {
         ParamSQL param = new ParamSQL();
@@ -116,12 +115,10 @@ public class Server {
             long start = System.nanoTime();
             setValues = sql.seekData(new Timestamp(from), new Timestamp(to), id);
             long stop = System.nanoTime();
-            System.out.println("Time of getting data from database " + TimeUnit.MILLISECONDS.toMillis(stop - start) + " ms");
+            System.out.println("Time of getting data from database " + TimeUnit.NANOSECONDS.toMillis(stop - start) + " ms");
 
             sendData(setValues, writer, socket);
             readReply(reader, writer, socket);
-            if (!socket.isClosed())
-                closeConnection(socket);
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -145,29 +142,29 @@ public class Server {
                 if (setValues.size() % dataInBlock == 0) {
                     for (int i = (numberOfBlocks - 1) * dataInBlock + 1; i < setValues.size(); i++)
                         sendPart.add(setValues.get(i));
-
                     writeToClient((byte) 1, numberOfBlocksToClient, sendPart, getCheckSum((ArrayList<SetValue>) setValues), writer);
+                    sendPart.clear();
                     closeSocketMap.put(socket, new Date());
                 } else {
                     for (int i = numberOfBlocks * dataInBlock + 1; i < setValues.size(); i++)
                         sendPart.add(setValues.get(i));
                     writeToClient((byte) 1, numberOfBlocksToClient, sendPart, getCheckSum((ArrayList<SetValue>) setValues), writer);
+                    sendPart.clear();
                     closeSocketMap.put(socket, new Date());
                 }
 
-            } else {
-                byteBuffer.clear();
             }
         } catch (IOException e) {
             e.printStackTrace();
         }
     }
 
-    private long getCheckSum(ArrayList<SetValue> sendPart) {
+    private long getCheckSum(ArrayList<SetValue> values) {
         Checksum checksum = new CRC32();
-        byte[] byteBuffer = sql.getByteArray(sendPart);
-        System.out.println(Arrays.toString(byteBuffer));
-        checksum.update(byteBuffer, 0, byteBuffer.length);
+        byte[] bytes = sql.getByteArray(values);
+        System.out.println(Arrays.toString(bytes));
+        System.out.println(bytes.length);
+        checksum.update(bytes, 0, bytes.length);
         return checksum.getValue();
     }
 
@@ -181,24 +178,25 @@ public class Server {
         replyFromClient.clear();
     }
 
-    private void closeConnection(Socket socket) throws IOException {
-        ByteBuffer closeFromClient = ByteBuffer.allocate(1);
-        InputStream inputStream = socket.getInputStream();
-        inputStream.read(closeFromClient.array());
-        byte isClose = closeFromClient.get(0);
-        if (isClose == 1) {
-            System.out.println("Closing connection " + socket.getLocalAddress());
-            socket.close();
-        }
-        System.out.println("Closed " + socket.isClosed());
-    }
+//    private void closeConnection(Socket socket) throws IOException {
+//        ByteBuffer closeFromClient = ByteBuffer.allocate(1);
+//        InputStream inputStream = socket.getInputStream();
+//        inputStream.read(closeFromClient.array());
+//        byte isClose = closeFromClient.get(0);
+//        if (isClose == 1) {
+//            System.out.println("Closing connection " + socket.getLocalAddress());
+//            socket.close();
+//        }
+//        System.out.println("Closed " + socket.isClosed());
+//    }
 
     private void writeToClient(byte isLast, Integer number, ArrayList<SetValue> sendPart, long crc, OutputStream writer) throws IOException {
+        byte[] toSend = sql.getByteArray(sendPart);
+        ByteBuffer byteBuffer = ByteBuffer.allocate(toSend.length + 13);
         byteBuffer.put(isLast);
         byteBuffer.putInt(number);
         byteBuffer.putLong(crc);
-        byteBuffer.put(sql.getByteArray(sendPart));
-        sendPart.clear();
+        byteBuffer.put(toSend);
         writer.write(byteBuffer.array());
         byteBuffer.clear();
     }

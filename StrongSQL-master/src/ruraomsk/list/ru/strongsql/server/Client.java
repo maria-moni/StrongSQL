@@ -6,7 +6,6 @@ import java.io.OutputStream;
 import java.net.Socket;
 import java.nio.ByteBuffer;
 import java.sql.Timestamp;
-import java.util.Arrays;
 import java.util.concurrent.TimeUnit;
 import java.util.zip.CRC32;
 import java.util.zip.Checksum;
@@ -24,6 +23,7 @@ public class Client {
     private byte isLast = 1;
     private Integer numberOfPackages;
     private ByteBuffer result;
+    private int q;
 
     public Client(Timestamp to, Timestamp from, int id, boolean isClose) {
         this.to = to;
@@ -59,28 +59,36 @@ public class Client {
         int protocolDataLen = Configuration.protocolExtraDataLen;
         ByteBuffer firstPackage = ByteBuffer.allocate(packagesInBlock * bytesInPackage + protocolDataLen);
         reader.read(firstPackage.array());
-        isLast = firstPackage.get(0);
-        numberOfPackages = firstPackage.getInt(1);
-        result = ByteBuffer.allocate(numberOfPackages * packagesInBlock * bytesInPackage);
-        result.put(firstPackage.array(), protocolDataLen, firstPackage.array().length - protocolDataLen);
+        isLast = firstPackage.get();
+        numberOfPackages = firstPackage.getInt();
+        firstPackage.getLong();
+        q = firstPackage.getInt();
+        result = ByteBuffer.allocate((numberOfPackages - 1) * packagesInBlock * bytesInPackage + q * bytesInPackage);
+        result.put(firstPackage.array(), firstPackage.position(), firstPackage.array().length - protocolDataLen);
         firstPackage.clear();
     }
 
     private void readPackages(InputStream reader, OutputStream writer) throws IOException {
         int protocolDataLen = Configuration.protocolExtraDataLen;
-        int readedPackages = 2;
-        ByteBuffer packages = ByteBuffer.allocate(packagesInBlock * bytesInPackage + protocolDataLen);
+        int readedPackages = 1;
+        ByteBuffer packages;
+
         long crc = 0;
         if (isLast != 1) {
             while (true) {
+                if (readedPackages + 1 == numberOfPackages)
+                    packages = ByteBuffer.allocate(q * bytesInPackage + protocolDataLen);
+                else
+                    packages = ByteBuffer.allocate(packagesInBlock * bytesInPackage + protocolDataLen);
                 reader.read(packages.array());
-                byte isLast = packages.get(0);
-                crc = packages.getLong(2);
-                result.put(packages.array(), protocolDataLen, packages.array().length - protocolDataLen);
-                packages.clear();
+                byte isLast = packages.get();
+                packages.getInt();
+                crc = packages.getLong();
+                packages.getInt();
                 readedPackages++;
-                if (isLast == 1)
-                    break;
+                result.put(packages.array(), packages.position(), packages.array().length - protocolDataLen);
+                packages.clear();
+                if (isLast == 1) break;
             }
         }
         stopTime = System.nanoTime();
@@ -89,10 +97,9 @@ public class Client {
         Checksum checksum = new CRC32();
         checksum.update(result.array(), 0, result.array().length);
 
-        System.out.println(Arrays.toString(result.array()));
-        System.out.println(result.array().length);
-        if (readedPackages == numberOfPackages || crc == checksum.getValue()) {//temp ||
-            System.out.println(crc + " " + checksum.getValue());
+//        System.out.println(Arrays.toString(result.array()));
+//        System.out.println(result.array().length);
+        if (readedPackages == numberOfPackages && crc == checksum.getValue()) {
             sendReply(reader, writer, 1);
         } else sendReply(reader, writer, 0);
     }
@@ -102,7 +109,7 @@ public class Client {
             ByteBuffer request = ByteBuffer.allocate(1);
             request.put((byte) isOk);
             writer.write(request.array());
-            if(isOk == 0){
+            if (isOk == 0) {
                 readFirstPackage(reader);
                 readPackages(reader, writer);
                 if (isClose)

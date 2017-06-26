@@ -27,7 +27,7 @@ public class Server {
     private Map<Socket, Date> closeSocketMap = new ConcurrentHashMap<>();
     private Set<Socket> query = Collections.newSetFromMap(new ConcurrentHashMap<Socket, Boolean>());
     private List<SetValue> setValues;
-
+    private int q;
 
     public void getConnection() {
         ParamSQL param = new ParamSQL();
@@ -130,29 +130,45 @@ public class Server {
         int numberOfBlocksToClient = (setValues.size() % dataInBlock) == 0 ? numberOfBlocks : numberOfBlocks + 1;
         try {
             if (setValues.size() != 0) {
+                int o = 0, p = 0;
+                q = setValues.size() - numberOfBlocks * dataInBlock;
 
                 for (int j = 0; j < numberOfBlocks - 1; j++) {
-                    for (int i = j * dataInBlock; i < j * dataInBlock + dataInBlock; i++)
+                    for (int i = j * dataInBlock; i < j * dataInBlock + dataInBlock; i++) {
                         sendPart.add(setValues.get(i));
+                        o++;
+                    }
                     writeToClient((byte) 0, numberOfBlocksToClient, sendPart, 0L, writer);
                     sendPart.clear();
                     closeSocketMap.put(socket, new Date());
                 }
 
-                if (setValues.size() % dataInBlock == 0) {
-                    for (int i = (numberOfBlocks - 1) * dataInBlock + 1; i < setValues.size(); i++)
+                if ((setValues.size() % dataInBlock) == 0) {
+                    for (int i = o; i < setValues.size(); i++) {
                         sendPart.add(setValues.get(i));
+                        o++;
+                    }
                     writeToClient((byte) 1, numberOfBlocksToClient, sendPart, getCheckSum((ArrayList<SetValue>) setValues), writer);
                     sendPart.clear();
                     closeSocketMap.put(socket, new Date());
                 } else {
-                    for (int i = numberOfBlocks * dataInBlock + 1; i < setValues.size(); i++)
+                    for (int i = (numberOfBlocks - 1) * dataInBlock; i < (numberOfBlocks - 1) * dataInBlock + dataInBlock; i++) {
                         sendPart.add(setValues.get(i));
+                        o++;
+                    }
+                    writeToClient((byte) 0, numberOfBlocksToClient, sendPart, 0L, writer);
+                    sendPart.clear();
+                    closeSocketMap.put(socket, new Date());
+
+                    for (int i = o; i < setValues.size(); i++) {
+                        sendPart.add(setValues.get(i));
+                        o++;
+                    }
+
                     writeToClient((byte) 1, numberOfBlocksToClient, sendPart, getCheckSum((ArrayList<SetValue>) setValues), writer);
                     sendPart.clear();
                     closeSocketMap.put(socket, new Date());
                 }
-
             }
         } catch (IOException e) {
             e.printStackTrace();
@@ -162,8 +178,8 @@ public class Server {
     private long getCheckSum(ArrayList<SetValue> values) {
         Checksum checksum = new CRC32();
         byte[] bytes = sql.getByteArray(values);
-        System.out.println(Arrays.toString(bytes));
-        System.out.println(bytes.length);
+//        System.out.println(Arrays.toString(bytes));
+//        System.out.println(bytes.length);
         checksum.update(bytes, 0, bytes.length);
         return checksum.getValue();
     }
@@ -192,13 +208,15 @@ public class Server {
 
     private void writeToClient(byte isLast, Integer number, ArrayList<SetValue> sendPart, long crc, OutputStream writer) throws IOException {
         byte[] toSend = sql.getByteArray(sendPart);
-        ByteBuffer byteBuffer = ByteBuffer.allocate(toSend.length + 13);
+        ByteBuffer byteBuffer = ByteBuffer.allocate(toSend.length + Configuration.protocolExtraDataLen);
         byteBuffer.put(isLast);
         byteBuffer.putInt(number);
         byteBuffer.putLong(crc);
+        byteBuffer.putInt(q);
         byteBuffer.put(toSend);
         writer.write(byteBuffer.array());
         byteBuffer.clear();
     }
+
 }
 
